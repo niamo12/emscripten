@@ -1,0 +1,934 @@
+#include <math.h>
+#include <GL/glut.h>
+
+const int chekor=20;     // kolku skali da se iscrtaat na edno skalilo
+float transZ=10;         // tekovna oddalechenost na pogledot
+float rotateA=0;         // tekoven agol na rotacija
+float rotateAspeed=0.0f; // prirast na agolot na rotacija (brzina)
+int polygonMode=GL_LINE; // mod na prikaz na poligonite - so linii
+float svX=0, svY=10, svZ=0;
+
+float agolX=0;
+float agolY=0;
+float agolZ=0;
+
+
+/* Procedura za iscrtuvanje na edno spiralno skalilo
+ * Kje ima tochno na broj "chekor" skali i spiralata kje svrtuva dva kruga
+ * visinata na skaliloto kje bide prilagodena da bide obmotana na stolb visok 1
+ * no na visina 0 i 1 nema potreba od skalila, pa kje bidat "chekor" bez niv
+ * radiusot na skaliloto kje bide tochno 1 (odnosno skalite kje bidat shiroki 1)
+ */
+
+
+
+void mrezha10x10 (void) {
+    float mat_ambient []={0.0,	0.0,	0.0,   1};
+   float mat_diffuse []={0.5	,0.0,	0.0,  1};
+   float mat_specular[]={0.7,	0.6,	0.6, 1};
+   float mat_shininess = 0.25f;
+   glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, mat_ambient);
+   glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, mat_diffuse);
+   glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, mat_specular);
+   glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, mat_shininess);
+   glMatrixMode(GL_MODELVIEW);
+glColorMaterial(GL_FRONT_AND_BACK,GL_DIFFUSE);
+   glBegin(GL_QUADS);
+      glNormal3f(0,1,0); // edna zaednichka normala za site chetiriagolnici od mrezhata
+      int i=0;
+      int j=0;
+      for ( i=0; i<10; i++)
+      {
+        for ( j=0; j<10; j++)
+        {
+          glVertex3f(i,  0,j);
+          glVertex3f(i+1,0,j);
+          glVertex3f(i+1,0,j+1);
+          glVertex3f(i,  0,j+1);
+        }
+      }
+   glEnd();
+}
+void kocka (void) // ova e objektot koj go pretstavuva svetloto
+{
+   int i, j;
+
+
+  // glColorMaterial(GL_FRONT_AND_BACK, GL_DIFFUSE);
+   glFrontFace(GL_CCW);
+
+   glColor3f(1,1,1);
+   glBegin(GL_QUADS);
+	glNormal3f(0,0,1);   // za sekoj poedinechen poligon mora da se navede vektor
+                         // koj e normalen na ramninata na poligonot, za da se znae
+                         // vo koj pravec se odbiva svetloto
+      glVertex3f(-10,10,0);
+      glVertex3f(10,10,0);
+      glVertex3f(10,-10,0);
+      glVertex3f(-10,-10,0);
+
+
+      glNormal3f(0,0,-1);
+      glVertex3f(-10,-10,13);
+      glVertex3f(-10,10,13);
+      glVertex3f(10,10,13);
+      glVertex3f(10,-10,13);
+
+      glNormal3f(0,1,0);
+      glVertex3f(-10,-10,0);
+      glVertex3f(-10,-10,13);
+      glVertex3f(10,-10,13);
+      glVertex3f(10,-10,0);
+
+      glNormal3f(-1,0,0);
+      glVertex3f(10,10,0);
+      glVertex3f(10,-10,0);
+      glVertex3f(10,-10,13);
+      glVertex3f(10,10,13);
+
+      glNormal3f(0,-1,0);
+      glVertex3f(10,10,0);
+      glVertex3f(10,10,13);
+      glVertex3f(-10,10,13);
+      glVertex3f(-10,10,0);
+
+      glNormal3f(1,0,0);
+      glVertex3f(-10,10,0);
+      glVertex3f(-10,10,13);
+      glVertex3f(-10,-10,13);
+      glVertex3f(-10,-10,0);
+   glEnd();
+}
+void skalilo (float chekor)
+{
+
+
+   float mat_ambient []={0.5f, 	0.5f, 	0.5f,   1};
+   float mat_diffuse []={1.0f, 	1.0f, 	1.0f,  1};
+   float mat_specular[]={0.9f, 	0.9f, 	0.9f, 1};
+   float mat_shininess = 0.8f;
+   glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, mat_ambient);
+   glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, mat_diffuse);
+   glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, mat_specular);
+   glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, mat_shininess);
+   glMatrixMode(GL_MODELVIEW);
+glColorMaterial(GL_FRONT_AND_BACK, GL_DIFFUSE);
+
+
+      float stepa=4.0*M_PI / chekor; // agol koj zafakja edna skala (2 kruga)
+      float stepv=1.0 / (chekor+1);  // razlika vo visina na dve skalila
+      float a=0;                     // pocheten agol za ciklusot
+
+      /* aktiviraj izmeni na matrica za transformacii na prostorot.
+       * transformaciite treba da se sfatat kako da se kontrolira robot koj
+       * znae da crta.
+       * Samiot robot e pochetokot na koordinatniot sistem.
+       * Orientacijata na robotot desno mu e +x, levo -x,
+       * gore mu e +y, dole mu e -y, napred e -z, nazad e +z.
+       * Robot znae samo relativno da gleda vo odnos na sebe.
+       * Koga se pravi nekakva transformacija vsushnost se pomestuva robotot,
+       * zaedno so koordinatniot pochetok vo nekoja nova pozicija i potoa
+       * crtanjeto pochnuva od tamu.
+       */
+      glMatrixMode(GL_MODELVIEW);
+
+      /* stavi ja tekovnata matrica na stack
+       * shto e isto kako da mu kazheme na robotot zapamti kade si se naogjal,
+       * kon kade si bil orientiral
+       */
+      glPushMatrix();
+      glFrontFace(GL_CW);
+
+      /* robotot odi pogore za pola chekor da pochne malku pogore prvataskala */
+      glTranslatef(0,stepv,0);
+
+      /* ciklus 2 svrtuvanja okolu kruzhnica, vo nekolku chekori:
+       * vo sekoj chekor robotot kje iscrta edna skala, pa kje se svrti malku
+       * vo prostorot i kje otide pogore vo prostorot za da bide tochno
+       * pozicioniran za crtanje na slednata skala
+       */
+      glColor3f( 1.0f,0.0f,0.0f);
+
+      while ( a <= 4.0*M_PI ) {
+
+         /* nacrtaj triagolnik so bojata da se menuva po sekoj chekoj
+          * triagolnikot e vpishan vo kruzhnica so radius 1
+          */
+         glBegin(GL_TRIANGLES);
+            glNormal3f(0,-1,0);
+            glVertex3f(0,0,0);
+            glVertex3f(1,0,0);
+            glVertex3f(cos(stepa),0,sin(stepa));
+         glEnd();
+
+         /* robotot se svrtuva tochno za agolot kolku shto e edna skala,
+          * no ovde, za razlika od cos, sin, se potrebni stepeni, a ne radijani
+          * svrtuvanjeto e okolu oska shto trgnuva od (0,0,0)-(0,1,0) a toa e
+          * faktichki samata y-oska
+          */
+         glRotatef(stepa * 180.0/M_PI, 0,1,0);
+
+         /* robotot odi pogore za edna skala */
+
+
+
+         a+=stepa;
+      }
+      glPopMatrix(); // vrati se na poslednata zapamtena pozicija na robotot
+}
+void skalilo1 (float chekor)
+{
+
+      float mat_ambient []={0.5f, 	0.5f, 	0.5f,   1};
+   float mat_diffuse []={1.0f, 	1.0f, 	1.0f,  1};
+   float mat_specular[]={0.9f, 	0.9f, 	0.9f, 1};
+   float mat_shininess = 0.8f;
+   glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, mat_ambient);
+   glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, mat_diffuse);
+   glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, mat_specular);
+   glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, mat_shininess);
+   glMatrixMode(GL_MODELVIEW);
+   glColorMaterial(GL_FRONT_AND_BACK, GL_DIFFUSE);
+
+glFrontFace(GL_CW);
+      float stepa=4.0*M_PI / chekor; // agol koj zafakja edna skala (2 kruga)
+      float stepv=1.0 / (chekor+1);  // razlika vo visina na dve skalila
+      float a=0;                     // pocheten agol za ciklusot
+
+      /* aktiviraj izmeni na matrica za transformacii na prostorot.
+       * transformaciite treba da se sfatat kako da se kontrolira robot koj
+       * znae da crta.
+       * Samiot robot e pochetokot na koordinatniot sistem.
+       * Orientacijata na robotot desno mu e +x, levo -x,
+       * gore mu e +y, dole mu e -y, napred e -z, nazad e +z.
+       * Robot znae samo relativno da gleda vo odnos na sebe.
+       * Koga se pravi nekakva transformacija vsushnost se pomestuva robotot,
+       * zaedno so koordinatniot pochetok vo nekoja nova pozicija i potoa
+       * crtanjeto pochnuva od tamu.
+       */
+
+
+      /* stavi ja tekovnata matrica na stack
+       * shto e isto kako da mu kazheme na robotot zapamti kade si se naogjal,
+       * kon kade si bil orientiral
+       */
+      glPushMatrix();
+
+      /* robotot odi pogore za pola chekor da pochne malku pogore prvataskala */
+      glTranslatef(0,stepv,0);
+
+      /* ciklus 2 svrtuvanja okolu kruzhnica, vo nekolku chekori:
+       * vo sekoj chekor robotot kje iscrta edna skala, pa kje se svrti malku
+       * vo prostorot i kje otide pogore vo prostorot za da bide tochno
+       * pozicioniran za crtanje na slednata skala
+       */
+
+      while ( a <= 4.0*M_PI ) {
+
+         /* nacrtaj triagolnik so bojata da se menuva po sekoj chekoj
+          * triagolnikot e vpishan vo kruzhnica so radius 1
+          */
+         glBegin(GL_TRIANGLES);
+            glVertex3f(0,0,0);
+            glVertex3f(1,0,0);
+            glVertex3f(cos(stepa),0,sin(stepa));
+         glEnd();
+
+         /* robotot se svrtuva tochno za agolot kolku shto e edna skala,
+          * no ovde, za razlika od cos, sin, se potrebni stepeni, a ne radijani
+          * svrtuvanjeto e okolu oska shto trgnuva od (0,0,0)-(0,1,0) a toa e
+          * faktichki samata y-oska
+          */
+         glRotatef(stepa * 180.0/M_PI, 0,1,0);
+
+         /* robotot odi pogore za edna skala */
+
+        glTranslatef(0,stepv,0);
+
+         a+=stepa;
+      }
+      glPopMatrix(); // vrati se na poslednata zapamtena pozicija na robotot
+}
+void drawSphere(double r, int lats, int longs) {
+
+
+     float mat_ambient []={0.24725	,0.1995	,0.0745, 1};
+   float mat_diffuse []={0.75164,	0.60648,	0.22648,  1};
+   float mat_specular[]={0.628281,	0.555802,	0.366065, 1};
+   float mat_shininess = 0.2f;
+   glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, mat_ambient);
+   glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, mat_diffuse);
+   glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, mat_specular);
+   glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, mat_shininess);
+   glMatrixMode(GL_MODELVIEW);
+
+glColorMaterial(GL_FRONT_AND_BACK, GL_DIFFUSE);
+        int i, j;
+        for(i = 0; i <= lats; i++) {
+            double lat0 = M_PI * (-5.5 + (double) (i - 1) / lats);
+           double z0  = sin(lat0);
+           double zr0 =  cos(lat0);
+
+           double lat1 = M_PI * (-5.5 + (double) i / lats);
+           double z1 = sin(lat1);
+           double zr1 = cos(lat1);
+
+           glBegin(GL_QUAD_STRIP);
+           for(j = 0; j <= longs; j++) {
+               double lng = 2 * M_PI * (double) (j - 1) / longs;
+              double x = cos(lng);
+               double y = sin(lng);
+
+
+               glNormal3f(x * zr0, y * zr0, z0);
+               glVertex3f(x * zr0, y * zr0, z0);
+               glNormal3f(x * zr1, y * zr1, z1);
+              glVertex3f(x * zr1, y * zr1, z1);
+           }
+           glEnd();
+       }
+   }
+void drawSphere1(double r, int lats, int longs) {
+
+
+     float mat_ambient []={0.19225	,0.19225	,0.19225, 1};
+   float mat_diffuse []={0.50754	,0.50754,	0.50754,  1};
+   float mat_specular[]={0.508273	,0.508273	,   0.508273, 1};
+   float mat_shininess = 0.4f;
+   glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, mat_ambient);
+   glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, mat_diffuse);
+   glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, mat_specular);
+   glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, mat_shininess);
+   glMatrixMode(GL_MODELVIEW);
+
+glColorMaterial(GL_FRONT_AND_BACK, GL_DIFFUSE);
+        int i, j;
+        for(i = 0; i <= lats; i++) {
+            double lat0 = M_PI * (-5.5 + (double) (i - 1) / lats);
+           double z0  = sin(lat0);
+           double zr0 =  cos(lat0);
+
+           double lat1 = M_PI * (-5.5 + (double) i / lats);
+           double z1 = sin(lat1);
+           double zr1 = cos(lat1);
+
+           glBegin(GL_QUAD_STRIP);
+           for(j = 0; j <= longs; j++) {
+               double lng = 2 * M_PI * (double) (j - 1) / longs;
+              double x = cos(lng);
+               double y = sin(lng);
+
+
+               glNormal3f(x * zr0, y * zr0, z0);
+               glVertex3f(x * zr0, y * zr0, z0);
+               glNormal3f(x * zr1, y * zr1, z1);
+              glVertex3f(x * zr1, y * zr1, z1);
+           }
+           glEnd();
+       }
+   }
+void drawSphere2(double r, int lats, int longs) {
+
+
+     float mat_ambient []={0.0	,0.1,	0.06, 1};
+   float mat_diffuse []={0.0	,0.50980392,	0.50980392,  1};
+   float mat_specular[]={0.50196078,	0.50196078	,0.50196078, 1};
+   float mat_shininess = 0.25f;
+   glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, mat_ambient);
+   glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, mat_diffuse);
+   glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, mat_specular);
+   glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, mat_shininess);
+   glMatrixMode(GL_MODELVIEW);
+
+glColorMaterial(GL_FRONT_AND_BACK, GL_DIFFUSE);
+        int i, j;
+        for(i = 0; i <= lats; i++) {
+            double lat0 = M_PI * (-5.5 + (double) (i - 1) / lats);
+           double z0  = sin(lat0);
+           double zr0 =  cos(lat0);
+
+           double lat1 = M_PI * (-5.5 + (double) i / lats);
+           double z1 = sin(lat1);
+           double zr1 = cos(lat1);
+
+           glBegin(GL_QUAD_STRIP);
+           for(j = 0; j <= longs; j++) {
+               double lng = 2 * M_PI * (double) (j - 1) / longs;
+              double x = cos(lng);
+               double y = sin(lng);
+
+
+               glNormal3f(x * zr0, y * zr0, z0);
+               glVertex3f(x * zr0, y * zr0, z0);
+               glNormal3f(x * zr1, y * zr1, z1);
+              glVertex3f(x * zr1, y * zr1, z1);
+           }
+           glEnd();
+       }
+   }
+
+void pyramid(){
+   glMatrixMode(GL_MODELVIEW);
+glColorMaterial(GL_FRONT_AND_BACK, GL_DIFFUSE);
+     float mat_ambient []={0.135,0.2225	,0.1575, 1};
+   float mat_diffuse []={0.5,0.89,0.63,  1};
+   float mat_specular[]={0.316228,0.316228	,0.316228, 1};
+   float mat_shininess = 0.1f;
+   glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, mat_ambient);
+   glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, mat_diffuse);
+   glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, mat_specular);
+   glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, mat_shininess);
+   glMatrixMode(GL_MODELVIEW);
+   glColorMaterial(GL_FRONT_AND_BACK,GL_DIFFUSE);
+glFrontFace(GL_CW);
+
+glBegin( GL_TRIANGLE_FAN);
+
+
+
+glVertex3f( 0.0f, 1.f, 0.0f );
+glVertex3f( -1.0f, -1.0f, 1.0f );
+glVertex3f( 1.0f, -1.0f, 1.0f);
+
+
+glVertex3f( 0.0f, 1.0f, 0.0f);
+glVertex3f( -1.0f, -1.0f, 1.0f);
+ glVertex3f( 0.0f, -1.0f, -1.0f);
+
+
+glVertex3f( 0.0f, 1.0f, 0.0f);
+ glVertex3f( 0.0f, -1.0f, -1.0f);
+ glVertex3f( 1.0f, -1.0f, 1.0f);
+
+
+glVertex3f( -1.0f, -1.0f, 1.0f);
+glVertex3f( 0.0f, -1.0f, -1.0f);
+ glVertex3f( 1.0f, -1.0f, 1.0f);
+
+
+glEnd();
+   }
+void drawSphere3(double r, int lats, int longs) {
+
+
+     float mat_ambient []={0.0	,0.1,	0.06, 1};
+   float mat_diffuse []={0.0	,0.50980392,	0.50980392,  1};
+   float mat_specular[]={0.50196078,	0.50196078,	0.50196078, 1};
+   float mat_shininess = 0.25f;
+   glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, mat_ambient);
+   glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, mat_diffuse);
+   glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, mat_specular);
+   glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, mat_shininess);
+   glMatrixMode(GL_MODELVIEW);
+
+glColorMaterial(GL_FRONT_AND_BACK, GL_DIFFUSE);
+        int i, j;
+        for(i = 0; i <= lats; i++) {
+            double lat0 = M_PI * (-5.5 + (double) (i - 1) / lats);
+           double z0  = sin(lat0);
+           double zr0 =  cos(lat0);
+
+           double lat1 = M_PI * (-5.5 + (double) i / lats);
+           double z1 = sin(lat1);
+           double zr1 = cos(lat1);
+
+           glBegin(GL_QUAD_STRIP);
+           for(j = 0; j <= longs; j++) {
+               double lng = 2 * M_PI * (double) (j - 1) / longs;
+              double x = cos(lng);
+               double y = sin(lng);
+
+
+               glNormal3f(x * zr0, y * zr0, z0);
+               glVertex3f(x * zr0, y * zr0, z0);
+               glNormal3f(x * zr1, y * zr1, z1);
+              glVertex3f(x * zr1, y * zr1, z1);
+           }
+           glEnd();
+       }
+   }
+
+
+/* procedura za iscrtuvanje na eden stolb so visina 1 i radius 1 (cilindar) */
+void stolb (float chekor)
+{
+      glColorMaterial(GL_FRONT_AND_BACK, GL_DIFFUSE);
+
+    float mat_ambient []={0.2125	,0.1275	,0.054, 1};
+   float mat_diffuse []={0.714	,0.4284	,0.18144,  1};
+   float mat_specular[]={0.393548	,0.271906	,0.166721, 1};
+   float mat_shininess = 0.2f;
+   glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, mat_ambient);
+   glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, mat_diffuse);
+   glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, mat_specular);
+   glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, mat_shininess);
+   glMatrixMode(GL_MODELVIEW);
+   glColorMaterial(GL_FRONT_AND_BACK,GL_DIFFUSE);
+glFrontFace(GL_CCW);
+
+      float stepa=2.0 * M_PI/chekor;
+      float a=0.0;
+
+      glMatrixMode(GL_MODELVIEW);
+      glPushMatrix();
+      while ( !( a > 2.0*M_PI ) ) {
+         /* slichno kako kaj skalite, no se koristat chetiriagolnici */
+         glBegin(GL_QUADS);
+
+            glVertex3f(1,0,0);
+            glVertex3f(cos(stepa),0,sin(stepa));
+            glVertex3f(cos(stepa),1,sin(stepa));
+            glVertex3f(1,1,0);
+         glEnd();
+         glRotatef(stepa*180.0/M_PI,0,1,0);
+         a+=stepa;
+      }
+      glPopMatrix();
+}
+
+/* soba so centar vo 0,0,0 i dadenite dimenzii, no odi od 0 pa nagore */
+void stolb_skalilo(float visina, float radiusN, float radiusV) {
+   glMatrixMode(GL_MODELVIEW);
+
+   glPushMatrix();
+      glScalef(radiusV,visina,radiusV);
+      stolb(chekor);
+   glPopMatrix();
+
+
+   glPushMatrix();
+      glScalef(radiusN,visina,radiusN);
+      glPushMatrix();
+      glTranslatef(0,1,0);
+skalilo(chekor);
+      glPopMatrix();
+
+
+      skalilo1(20);
+   glPopMatrix();
+}
+void soba (float dimX, float dimY, float dimZ)
+{
+
+
+
+   float mat_ambient []={0.24725	,0.1995	,0.0745,   1};
+   float mat_diffuse []={0.75164	,0.60648,	0.22648,  1};
+   float mat_specular[]={0.628281	,0.555802,	0.366065, 1};
+   float mat_shininess = 0.4f;
+   glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, mat_ambient);
+   glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, mat_diffuse);
+   glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, mat_specular);
+   glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, mat_shininess);
+   glMatrixMode(GL_MODELVIEW);
+glColorMaterial(GL_FRONT_AND_BACK,GL_DIFFUSE);
+
+glFrontFace(GL_CW);
+      //neophodno pomestuvanje nagore za da pochne od visina 0
+      glTranslatef(0,dimY/2,0);
+      //neophodno skaliranje za da ispadnat dimenziite
+      glScalef(dimX/2, dimY/2, dimZ/2);
+glPushMatrix();
+      // kockata e 2xS2x2, so centar vo 0,0,0 (znachi od -1, do 1)
+      glBegin(GL_QUADS);
+	      //nazad
+	      glNormal3f(0,0,-2);
+         glVertex3f(-1,-1,-1);
+         glVertex3f( 1,-1,-1);
+         glVertex3f( 1, 1,-1);
+         glVertex3f(-1, 1,-1);
+
+
+
+
+
+
+	//napred
+
+
+         glNormal3f(0,0,2);
+         glVertex3f(-1,-1,1);
+         glVertex3f(-1, 1,1);
+         glVertex3f( 1, 1,1);
+         glVertex3f( 1,-1,1);
+
+		//pod
+
+         glNormal3f(0,-2,0);
+         glVertex3f(-1,-1,-1);
+         glVertex3f( 1,-1,-1);
+         glVertex3f( 1,-1, 1);
+         glVertex3f(-1,-1, 1);
+
+         //desno
+
+         glNormal3f(2,0,0);
+         glVertex3f(1,-1,-1);
+         glVertex3f(1, 1,-1);
+         glVertex3f(1, 1, 1);
+         glVertex3f(1,-1, 1);
+
+		//gore
+
+
+         glNormal3f(0,2,0);
+         glVertex3f(-1,1,-1);
+         glVertex3f( 1,1,-1);
+         glVertex3f( 1,1, 1);
+         glVertex3f(-1,1, 1);
+
+        //levo
+
+         glNormal3f(-2,0,0);
+         glVertex3f(-1, 1,-1);
+         glVertex3f(-1,-1,-1);
+         glVertex3f(-1,-1, 1);
+         glVertex3f(-1, 1, 1);
+      glEnd();
+
+
+      glPopMatrix();
+
+
+glPopMatrix();
+
+
+
+
+}
+/*
+ * Iscrtaj kombinirano stolb-skalilo
+ */
+
+void cone(int radius,int height)
+{
+    // draw the upper part of the cone
+ float mat_ambient []={0.05,	0.0	,0.0,   1};
+   float mat_diffuse []={0.5	,0.4	,0.4,  1};
+   float mat_specular[]={0.7	,0.04	,0.04, 1};
+   float mat_shininess = .078125f;
+   glMaterialfv(GL_FRONT_AND_BACK, GL_AMBIENT, mat_ambient);
+   glMaterialfv(GL_FRONT_AND_BACK, GL_DIFFUSE, mat_diffuse);
+   glMaterialfv(GL_FRONT_AND_BACK, GL_SPECULAR, mat_specular);
+   glMaterialf(GL_FRONT_AND_BACK, GL_SHININESS, mat_shininess);
+   glMatrixMode(GL_MODELVIEW);
+glColorMaterial(GL_FRONT_AND_BACK,GL_DIFFUSE);
+
+glBegin(GL_TRIANGLE_FAN);
+glVertex3f(0, 0, height);
+for (int angle = 0; angle < 360; angle++) {
+    glVertex3f(sin(angle) * radius, cos(angle) * radius, 0);
+}
+glEnd();
+
+// draw the base of the cone
+glBegin(GL_TRIANGLE_FAN);
+glVertex3f(0, 0, 0);
+for (int angle = 0; angle < 360; angle++) {
+    // normal is just pointing down
+    glNormal3f(0, -1, 0);
+    glVertex3f(sin(angle) * radius, cos(angle) * radius, 0);
+}
+glEnd();
+}
+
+void circle_line(){
+float x,y;
+float radius = 0.5f;
+glBegin(GL_LINES);
+
+
+    x = (float)radius * cos(359 * M_PI/180.0f);
+    y = (float)radius * sin(359 * M_PI/180.0f);
+    for(int j = 0; j < 360; j++)
+    {
+        glVertex2f(x,y);
+        x = (float)radius * cos(j * M_PI/180.0f);
+        y = (float)radius * sin(j * M_PI/180.0f);
+        glVertex2f(x,y);
+    }
+glEnd();
+}
+void display(void)
+{
+   /* izbor na mod na crtanje poligoni popolneti ili prazni */
+   glPolygonMode(GL_FRONT_AND_BACK,polygonMode);
+   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
+glColorMaterial(GL_FRONT_AND_BACK,GL_DIFFUSE);
+   //Mestenje pogled
+   glMatrixMode(GL_MODELVIEW);
+   glLoadIdentity();
+     gluLookAt(transZ*cos(rotateA),10,transZ*sin(rotateA), 0,3,0, 0,1,0);
+     // repozicioniranje na svetloto
+   GLfloat svetlo0_position[]= {-4,1,-1,1};                 //SVETLO 0 SOBA
+   glLightfv(GL_LIGHT0,GL_POSITION,svetlo0_position);
+   GLfloat spotdir[]= {0,50,0};
+   glLightfv(GL_LIGHT0,GL_SPOT_DIRECTION,spotdir);
+   //glClearColor(0,0.196078 ,0.6 , 0.8);
+
+    GLfloat svetlo1_position[]= {3,3,5,1};
+   glLightfv(GL_LIGHT1,GL_POSITION,svetlo1_position);           //SVETLO XPLANETA
+   GLfloat spotdir1[]= {50,0,0};
+   glLightfv(GL_LIGHT1,GL_SPOT_DIRECTION,spotdir1);
+
+   GLfloat svetlo2_position[]= {1,4,-2,1};
+   glLightfv(GL_LIGHT2,GL_POSITION,svetlo2_position);                    //
+   GLfloat spotdir2[]= {0,0,-50};                                        //SVETLO ZELENA PLANETA
+   glLightfv(GL_LIGHT2,GL_SPOT_DIRECTION,spotdir2);
+
+
+
+   GLfloat svetlo3_position[]= {1,0,5};
+   glLightfv(GL_LIGHT3,GL_POSITION,svetlo3_position);
+   GLfloat spotdir3[]= {50,0,0};                                                //conus
+   glLightfv(GL_LIGHT3,GL_SPOT_DIRECTION,spotdir3);
+
+ GLfloat svetlo4_position[]= {-9,7,5,1};
+   glLightfv(GL_LIGHT4,GL_POSITION,svetlo4_position);
+   GLfloat spotdir4[]= {0,-50,0};
+   glLightfv(GL_LIGHT4,GL_SPOT_DIRECTION,spotdir4);
+
+glPushMatrix();
+
+
+   glPushMatrix();
+   glTranslatef(-4,4,-1);
+
+
+
+        glPushMatrix();
+        glTranslatef(0,1,0);
+        glScalef(0.5,0.5,0.5);
+        glRotatef(90,-1,0,0);
+        stolb_skalilo(10.0,2.0,0.8);
+        glPopMatrix();
+
+glPushMatrix();
+  glTranslatef(0,1,-5);
+  glScalef(0.5,0.5,0.2);
+  glRotatef(45,0,0,1);
+  mrezha10x10();
+  glScalef(1,0.95,1);
+  glRotatef(90,0,0,1);
+   mrezha10x10();
+  glPopMatrix();
+    soba(2,2,2);
+    glPopMatrix();
+
+   glPushMatrix();
+   glTranslatef(-4,5,0.5);// pomesti se na pozicija za crtanje na 1 skali
+   glRotatef(90,1,0,0);
+   pyramid();
+   glPopMatrix();
+
+
+    glPushMatrix();
+
+        glTranslatef(-4,6,-1);
+        drawSphere3(1,8,20);
+    glPopMatrix();
+
+
+    glPushMatrix();
+
+        glTranslatef(5,3,5);
+        glScalef(2,2,2);  //SVETLO 1
+        drawSphere1(1,20,20);
+    glPopMatrix();
+
+    glPushMatrix();
+    glRotatef(45,1,1,0);
+    glTranslatef(2,6,5);
+    glScalef(5,5,5);
+    circle_line();
+    glPopMatrix();
+
+
+    glPushMatrix();
+    glRotatef(45,-1,-1,0);
+    glTranslatef(7,1,2);
+    glScalef(5,5,5);
+    circle_line();
+    glPopMatrix();
+
+    glPushMatrix();
+           glTranslatef(1,4,-4);  //SVETLO 2
+
+           glScalef(3,2,3);
+           drawSphere2(1,10,10);
+    glPopMatrix();  // pomesti se na pozicija za crtanje na 2 skali
+
+    glPushMatrix();
+           glTranslatef(-10,5,5);               //SVETLO 4
+           drawSphere(1,10,10);
+    glPopMatrix();  // pomesti se na pozicija za crtanje na 2 skali
+
+
+
+
+    glPushMatrix();
+     glRotatef(90,1,1,0);
+       glTranslatef(4,8,-4);  // pomesti se na pozicija za crtanje na 3 skali             <-----------------------------------------------svetlo03
+
+       cone(2,3);
+       glRotatef(180,1,0,0);
+       cone(2,3);
+    glPopMatrix();
+
+glPopMatrix();
+
+
+   glFlush();             // iscrtaj
+
+   // smeni buffer za prikaz na ekran za da se eliminira trepkanje
+   glutSwapBuffers();
+}
+
+void init (void)
+{
+   glClearColor(0.1f, 0.1f, 0.1f, 0.0f);
+   glMatrixMode(GL_PROJECTION);
+   glLoadIdentity();
+   glFrustum(-1,1, -1, 1, 1, 1000);
+
+  // glShadeModel(GL_SMOOTH);
+   glEnable(GL_DEPTH_TEST);
+   glEnable(GL_LIGHTING);
+   glEnable(GL_COLOR_MATERIAL);
+
+   // globalno svetlo
+   GLfloat global_ambient[]= {0.5,0.5,0.5,1};
+   glLightModelfv(GL_LIGHT_MODEL_AMBIENT, global_ambient);
+   glLightModeli(GL_LIGHT_MODEL_LOCAL_VIEWER, GL_TRUE);
+   glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE);
+
+   // Svetlo 0
+   GLfloat svetlo0_ambient[]= {0.5,0.5,0.5,1};
+   GLfloat svetlo0_diffuse[]= {1.0,1.0,1.0,1};
+   GLfloat svetlo0_specular[]= {1.0,1.0,1.0,1};
+   glLightfv(GL_LIGHT0,GL_AMBIENT,svetlo0_ambient);
+   glLightfv(GL_LIGHT0,GL_DIFFUSE,svetlo0_diffuse);
+   glLightfv(GL_LIGHT0,GL_SPECULAR,svetlo0_specular);
+   glLightf(GL_LIGHT0,GL_SPOT_CUTOFF,30.0f);
+   glLighti(GL_LIGHT0,GL_SPOT_EXPONENT,30);
+   glEnable(GL_LIGHT0);
+   glEnable(GL_NORMALIZE);
+
+
+   GLfloat svetlo1_ambient[]= {0.5,0.5,0.5,1};
+   GLfloat svetlo1_diffuse[]= {1.0,1.0,1.0,1};
+   GLfloat svetlo1_specular[]= {1.0,1.0,1.0,1};
+   glLightfv(GL_LIGHT1,GL_AMBIENT,svetlo1_ambient);
+   glLightfv(GL_LIGHT1,GL_DIFFUSE,svetlo1_diffuse);
+   glLightfv(GL_LIGHT1,GL_SPECULAR,svetlo1_specular);
+   glLightf(GL_LIGHT1,GL_SPOT_CUTOFF,30.0f);
+   glLighti(GL_LIGHT1,GL_SPOT_EXPONENT,30);
+   glEnable(GL_LIGHT1);
+
+    GLfloat svetlo2_ambient[]= {0.5,0.5,0.5,1};
+   GLfloat svetlo2_diffuse[]= {1.0,1.0,1.0,1};
+   GLfloat svetlo2_specular[]= {1.0,1.0,1.0,1};
+   glLightfv(GL_LIGHT2,GL_AMBIENT,svetlo2_ambient);
+   glLightfv(GL_LIGHT2,GL_DIFFUSE,svetlo2_diffuse);
+   glLightfv(GL_LIGHT2,GL_SPECULAR,svetlo2_specular);
+   glLightf(GL_LIGHT2,GL_SPOT_CUTOFF,30.0f);
+   glLighti(GL_LIGHT2,GL_SPOT_EXPONENT,30);
+   glEnable(GL_LIGHT2);
+
+   GLfloat svetlo3_ambient[]= {0.5,0.5,0.5,1};
+   GLfloat svetlo3_diffuse[]= {1.0,1.0,1.0,1};
+   GLfloat svetlo3_specular[]= {1.0,1.0,1.0,1};
+   glLightfv(GL_LIGHT3,GL_AMBIENT,svetlo3_ambient);
+   glLightfv(GL_LIGHT3,GL_DIFFUSE,svetlo3_diffuse);
+   glLightfv(GL_LIGHT3,GL_SPECULAR,svetlo3_specular);
+   glLightf(GL_LIGHT3,GL_SPOT_CUTOFF,30.0f);
+   glLighti(GL_LIGHT3,GL_SPOT_EXPONENT,30);
+   glEnable(GL_LIGHT3);
+
+
+   GLfloat svetlo4_ambient[]= {0.5,0.5,0.5,1};
+   GLfloat svetlo4_diffuse[]= {1.0,1.0,1.0,1};
+   GLfloat svetlo4_specular[]= {1.0,1.0,1.0,1};
+   glLightfv(GL_LIGHT4,GL_AMBIENT,svetlo4_ambient);
+   glLightfv(GL_LIGHT4,GL_DIFFUSE,svetlo4_diffuse);
+   glLightfv(GL_LIGHT4,GL_SPECULAR,svetlo4_specular);
+   glLightf(GL_LIGHT4,GL_SPOT_CUTOFF,30.0f);
+   glLighti(GL_LIGHT4,GL_SPOT_EXPONENT,30);
+   glEnable(GL_LIGHT4);
+
+   // predmetite shto se preblisku i predaleku nema da bidat vidlivi!!!
+
+  // se vklucuva sortiranje na objektite po dalechina (dlabochina)
+}
+
+void keyboard(unsigned char key, int x, int y)
+{
+   switch (key) {
+      case 27:                 // ESC e pritisnat
+         exit(0);
+         break;
+      case 'W':
+         transZ+=0.5f;
+         glutPostRedisplay();  // obnovi go prikazot
+         break;
+      case 'S':
+         transZ-=0.5f;
+         if (transZ<0) transZ=0;
+         glutPostRedisplay();  // obnovi go prikazot
+         break;
+      case 'w':
+         transZ+=0.1f;
+         glutPostRedisplay();  // obnovi go prikazot
+         break;
+      case 's':
+         transZ-=0.1f;
+         if (transZ<0) transZ=0;
+         glutPostRedisplay();  // obnovi go prikazot
+         break;
+      case 'A':
+         rotateAspeed+=1.0f;
+         glutPostRedisplay();  // obnovi go prikazot
+         break;
+      case 'a':
+         rotateAspeed+=0.01f;
+         glutPostRedisplay();  // obnovi go prikazot
+         break;
+      case 'D':
+         rotateAspeed-=1.0f;
+         glutPostRedisplay();  // obnovi go prikazot
+         break;
+      case 'd':
+         rotateAspeed-=0.01f;
+         glutPostRedisplay();  // obnovi go prikazot
+         break;
+      case '1':
+         polygonMode=GL_LINE;  // mod na prikaz za poligoni samo so rabovi
+         glutPostRedisplay();  // obnovi go prikazot
+         break;
+      case '2':
+         polygonMode=GL_FILL;  // mod na prikaz za poligoni - popolneti
+         glutPostRedisplay();  // obnovi go prikazot
+         break;
+   }
+}
+void idle(void)
+{
+  rotateA+=rotateAspeed;
+  glutPostRedisplay();     // obnovi go prikazot
+}
+
+int main(int argc, char** argv)
+{
+   glutInit(&argc, argv);
+   glutInitDisplayMode (GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
+   glutInitWindowSize (450, 350);
+   glutInitWindowPosition (100, 100);
+   glutCreateWindow ("Soba so skalila");
+   init ();
+   glutDisplayFunc(display);
+   glutIdleFunc(idle); // ovaa funkcija se povikuva vo ramnomerni intervali
+                       // koga programot ne izvrshuva drugi funkcii
+   glutKeyboardFunc(keyboard); // Pri pritisok na tastaturata se povikuva keyboard
+   glutMainLoop();
+   return 0;
+}
